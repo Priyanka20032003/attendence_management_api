@@ -1,5 +1,6 @@
 from datetime import date
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class EmployeeCreate(BaseModel):

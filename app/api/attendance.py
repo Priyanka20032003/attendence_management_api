@@ -1,23 +1,17 @@
-from datetime import datetime, timezone
+import logging
+import smtplib
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException
 from pymongo.errors import DuplicateKeyError
 
 from app.core.config import settings
-from app.db.database import employees_collection, attendance_collection
+from app.db.database import attendance_collection, employees_collection
 from app.schemas.attendance import CheckInRequest, CheckOutRequest
 from app.services.email_service import send_daily_violation_email
 
-from app.core.config import settings
-from app.db.database import (
-    employees_collection,
-    attendance_collection,
-)
-from app.schemas.attendance import (
-    CheckInRequest,
-    CheckOutRequest,
-)
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/attendance",
@@ -30,10 +24,12 @@ company_tz = ZoneInfo(settings.company_timezone)
 
 @router.post("/check-in", status_code=201)
 def check_in(data: CheckInRequest):
-    employee = employees_collection.find_one({
-        "employee_id": data.employee_id,
-        "is_active": True,
-    })
+    employee = employees_collection.find_one(
+        {
+            "employee_id": data.employee_id,
+            "is_active": True,
+        }
+    )
 
     if not employee:
         raise HTTPException(404, "Active employee not found")
@@ -43,19 +39,21 @@ def check_in(data: CheckInRequest):
         data.entry_time,
         tzinfo=company_tz,
     )
-    entry_utc = local_datetime.astimezone(timezone.utc)
+    entry_utc = local_datetime.astimezone(UTC)
 
     try:
-        attendance_collection.insert_one({
-            "employee_id": data.employee_id,
-            "date": data.attendance_date.isoformat(),
-            "entry_time": entry_utc,
-            "exit_time": None,
-            "total_hours": None,
-            "status": "Incomplete",
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
-        })
+        attendance_collection.insert_one(
+            {
+                "employee_id": data.employee_id,
+                "date": data.attendance_date.isoformat(),
+                "entry_time": entry_utc,
+                "exit_time": None,
+                "total_hours": None,
+                "status": "Incomplete",
+                "created_at": datetime.now(UTC),
+                "updated_at": datetime.now(UTC),
+            }
+        )
     except DuplicateKeyError:
         raise HTTPException(
             409,
@@ -72,10 +70,12 @@ def check_in(data: CheckInRequest):
 
 @router.put("/check-out")
 def check_out(data: CheckOutRequest):
-    employee = employees_collection.find_one({
-        "employee_id": data.employee_id,
-        "is_active": True,
-    })
+    employee = employees_collection.find_one(
+        {
+            "employee_id": data.employee_id,
+            "is_active": True,
+        }
+    )
 
     if not employee:
         raise HTTPException(404, "Active employee not found")
@@ -85,13 +85,15 @@ def check_out(data: CheckOutRequest):
         data.exit_time,
         tzinfo=company_tz,
     )
-    exit_utc = local_datetime.astimezone(timezone.utc)
+    exit_utc = local_datetime.astimezone(UTC)
 
-    record = attendance_collection.find_one({
-        "employee_id": data.employee_id,
-        "date": data.attendance_date.isoformat(),
-        "exit_time": None,
-    })
+    record = attendance_collection.find_one(
+        {
+            "employee_id": data.employee_id,
+            "date": data.attendance_date.isoformat(),
+            "exit_time": None,
+        }
+    )
 
     if not record:
         raise HTTPException(404, "No open check-in found for this date")
@@ -116,12 +118,11 @@ def check_out(data: CheckOutRequest):
                 "exit_time": exit_utc,
                 "total_hours": total_hours,
                 "status": "Present",
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(UTC),
             }
         },
     )
 
-    
     # Send an email if the employee worked less than 5 hours.
     if total_hours < 5:
         try:
@@ -131,8 +132,10 @@ def check_out(data: CheckOutRequest):
                 attendance_date=data.attendance_date.isoformat(),
                 total_hours=total_hours,
             )
-        except Exception as exc:
-            print(f"Could not send daily violation email: {exc}")
+        # except Exception as exc:
+        #     print(f"Could not send daily violation email: {exc}")
+        except (smtplib.SMTPException, OSError):
+            logger.exception("Could not send daily violation email")
 
     return {
         "message": "Check-out recorded successfully",
@@ -143,6 +146,7 @@ def check_out(data: CheckOutRequest):
         "total_hours": total_hours,
         "status": "Present",
     }
+
 
 @router.get("/{employee_id}")
 def get_attendance(employee_id: str):

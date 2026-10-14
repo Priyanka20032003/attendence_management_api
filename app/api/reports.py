@@ -1,11 +1,11 @@
-
-from datetime import date, timedelta
 import calendar
+from datetime import date, timedelta
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.config import settings
-from app.db.database import employees_collection, attendance_collection
+from app.db.database import attendance_collection, employees_collection
 
 router = APIRouter(
     prefix="/api/v1/attendance",
@@ -45,17 +45,11 @@ def get_report_dates(
 
     if report_type == "custom":
         if not start_date or not end_date:
-            raise HTTPException(
-                400, "start_date and end_date are required"
-            )
+            raise HTTPException(400, "start_date and end_date are required")
         if start_date > end_date:
-            raise HTTPException(
-                400, "start_date cannot be after end_date"
-            )
+            raise HTTPException(400, "start_date cannot be after end_date")
         if (end_date - start_date).days > 366:
-            raise HTTPException(
-                400, "Custom range cannot exceed 367 calendar days"
-            )
+            raise HTTPException(400, "Custom range cannot exceed 367 calendar days")
         return start_date, end_date
 
     raise HTTPException(
@@ -67,11 +61,12 @@ def get_report_dates(
 @router.get("/report/")
 def attendance_report(
     report_type: str = Query(
-    ...,
-    description="Choose: daily, weekly, monthly, yearly, or custom",
-    enum=["daily", "weekly", "monthly", "yearly", "custom"],
-),
-    date_value: date | None = Query(None, alias="date"),
+        ...,
+        description="Choose: daily, weekly, monthly, yearly, or custom",
+        enum=["daily", "weekly", "monthly", "yearly", "custom"],
+    ),
+    # date_value: date | None = Query(None, alias="date"),
+    date_value: Annotated[date | None, Query(alias="date")] = None,
     year: int | None = None,
     month: int | None = None,
     start_date: date | None = None,
@@ -86,22 +81,22 @@ def attendance_report(
         end_date,
     )
 
-    employees = list(
-        employees_collection.find({"is_active": True}, {"_id": 0})
-    )
+    employees = list(employees_collection.find({"is_active": True}, {"_id": 0}))
 
     records = list(
-        attendance_collection.find({
-            "date": {
-                "$gte": start.isoformat(),
-                "$lte": end.isoformat(),
-            }
-        }, {"_id": 0}).sort([("date", 1), ("employee_id", 1)])
+        attendance_collection.find(
+            {
+                "date": {
+                    "$gte": start.isoformat(),
+                    "$lte": end.isoformat(),
+                }
+            },
+            {"_id": 0},
+        ).sort([("date", 1), ("employee_id", 1)])
     )
 
     attendance_lookup = {
-        (record["employee_id"], record["date"]): record
-        for record in records
+        (record["employee_id"], record["date"]): record for record in records
     }
 
     report_days = []
@@ -118,9 +113,7 @@ def attendance_report(
 
     for employee in employees:
         employee_id = employee["employee_id"]
-        joining_date = date.fromisoformat(
-            str(employee["joining_date"])[:10]
-        )
+        joining_date = date.fromisoformat(str(employee["joining_date"])[:10])
 
         daily_breakdown = []
         attended_days = 0
@@ -130,28 +123,30 @@ def attendance_report(
 
         for day in report_days:
             if day.weekday() >= 5:
-                daily_breakdown.append({
-                    "date": day.isoformat(),
-                    "status": "Weekend",
-                    "entry_time": None,
-                    "exit_time": None,
-                    "total_hours": 0,
-                })
+                daily_breakdown.append(
+                    {
+                        "date": day.isoformat(),
+                        "status": "Weekend",
+                        "entry_time": None,
+                        "exit_time": None,
+                        "total_hours": 0,
+                    }
+                )
                 continue
 
             if day < joining_date:
-                daily_breakdown.append({
-                    "date": day.isoformat(),
-                    "status": "Not Joined Yet",
-                    "entry_time": None,
-                    "exit_time": None,
-                    "total_hours": 0,
-                })
+                daily_breakdown.append(
+                    {
+                        "date": day.isoformat(),
+                        "status": "Not Joined Yet",
+                        "entry_time": None,
+                        "exit_time": None,
+                        "total_hours": 0,
+                    }
+                )
                 continue
 
-            record = attendance_lookup.get(
-                (employee_id, day.isoformat())
-            )
+            record = attendance_lookup.get((employee_id, day.isoformat()))
 
             if not record:
                 status = "Not Attended Office"
@@ -178,25 +173,29 @@ def attendance_report(
                 else:
                     status = record.get("status", "Unknown")
 
-            daily_breakdown.append({
-                "date": day.isoformat(),
-                "status": status,
-                "entry_time": entry_time,
-                "exit_time": exit_time,
-                "total_hours": hours,
-            })
+            daily_breakdown.append(
+                {
+                    "date": day.isoformat(),
+                    "status": status,
+                    "entry_time": entry_time,
+                    "exit_time": exit_time,
+                    "total_hours": hours,
+                }
+            )
 
-        employee_reports.append({
-            "employee_id": employee_id,
-            "name": employee["name"],
-            "email": employee["email"],
-            "department": employee["department"],
-            "days_attended": attended_days,
-            "days_not_attended": absent_days,
-            "incomplete_sessions": incomplete_sessions,
-            "total_recorded_hours": round(employee_hours, 2),
-            "daily_breakdown": daily_breakdown,
-        })
+        employee_reports.append(
+            {
+                "employee_id": employee_id,
+                "name": employee["name"],
+                "email": employee["email"],
+                "department": employee["department"],
+                "days_attended": attended_days,
+                "days_not_attended": absent_days,
+                "incomplete_sessions": incomplete_sessions,
+                "total_recorded_hours": round(employee_hours, 2),
+                "daily_breakdown": daily_breakdown,
+            }
+        )
 
     return {
         "report_type": report_type,

@@ -1,13 +1,18 @@
 from pymongo import MongoClient
+from pymongo.database import Database
 from app.core.config import settings
 
-client = MongoClient(
+# client = MongoClient(settings.mongo_url, serverSelectionTimeoutMS=5000, tz_aware=True)
+
+# database = client[settings.database_name]
+
+client: MongoClient = MongoClient(
     settings.mongo_url,
     serverSelectionTimeoutMS=5000,
-    tz_aware=True
+    tz_aware=True,
 )
 
-database = client[settings.database_name]
+database: Database = client[settings.database_name]
 
 employees_collection = database["employees"]
 attendance_collection = database["attendance"]

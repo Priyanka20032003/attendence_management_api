@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
 from pymongo.errors import DuplicateKeyError
@@ -14,14 +14,16 @@ router = APIRouter(
 
 @router.post("/", status_code=201)
 def create_employee(employee: EmployeeCreate):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     document = employee.model_dump(mode="json")
-    document.update({
-        "is_active": True,
-        "created_at": now,
-        "updated_at": now,
-    })
+    document.update(
+        {
+            "is_active": True,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
 
     try:
         employees_collection.insert_one(document)
@@ -74,7 +76,7 @@ def update_employee(
     employee: EmployeeUpdate,
 ):
     data = employee.model_dump(mode="json")
-    data["updated_at"] = datetime.now(timezone.utc)
+    data["updated_at"] = datetime.now(UTC)
 
     result = employees_collection.update_one(
         {
@@ -90,9 +92,7 @@ def update_employee(
             detail="Active employee not found",
         )
 
-    return {
-        "message": "Employee updated successfully"
-    }
+    return {"message": "Employee updated successfully"}
 
 
 @router.delete("/{employee_id}")
@@ -105,7 +105,7 @@ def deactivate_employee(employee_id: str):
         {
             "$set": {
                 "is_active": False,
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(UTC),
             }
         },
     )
@@ -116,6 +116,4 @@ def deactivate_employee(employee_id: str):
             detail="Active employee not found",
         )
 
-    return {
-        "message": "Employee deactivated successfully"
-    }
+    return {"message": "Employee deactivated successfully"}

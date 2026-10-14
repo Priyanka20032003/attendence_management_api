@@ -1,4 +1,3 @@
-
 import smtplib
 from email.message import EmailMessage
 
@@ -16,9 +15,7 @@ def send_email(
         return False
 
     if not settings.smtp_username or not settings.smtp_password:
-        raise ValueError(
-            "SMTP_USERNAME and SMTP_PASSWORD must be configured."
-        )
+        raise ValueError("SMTP_USERNAME and SMTP_PASSWORD must be configured.")
 
     message = EmailMessage()
     message["Subject"] = subject
