@@ -43,7 +43,7 @@ jobs:
 
       - name: Run Flake8
         run: |
-          flake8 --check-only app tests
+          flake8 app tests
 
       - name: Run Ruff
         run: |
