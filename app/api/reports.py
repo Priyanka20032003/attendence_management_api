@@ -57,10 +57,7 @@ def get_report_dates(
 
     raise HTTPException(
         400,
-        detail=(
-            "report_type must be daily, weekly, monthly, "
-            "yearly, or custom"
-        ),
+        detail=("report_type must be daily, weekly, monthly, " "yearly, or custom"),
     )
 
 
@@ -89,12 +86,7 @@ def attendance_report(
         end_date,
     )
 
-    employees = list(
-        employees_collection.find(
-            {"is_active": True},
-            {"_id": 0}
-        )
-    )
+    employees = list(employees_collection.find({"is_active": True}, {"_id": 0}))
 
     records = list(
         attendance_collection.find(
