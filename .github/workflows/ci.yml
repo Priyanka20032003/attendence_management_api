@@ -32,7 +32,9 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
-
+      - name: Check Black version
+        run: python -m black --version
+        
       - name: Check Formatting (Black)
         run: |
           black --check .
