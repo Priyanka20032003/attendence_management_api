@@ -49,12 +49,18 @@ def get_report_dates(
         if start_date > end_date:
             raise HTTPException(400, "start_date cannot be after end_date")
         if (end_date - start_date).days > 366:
-            raise HTTPException(400, "Custom range cannot exceed 367 calendar days")
+            raise HTTPException(
+                400,
+                "Custom range cannot exceed 367 calendar days",
+            )
         return start_date, end_date
 
     raise HTTPException(
         400,
-        "report_type must be daily, weekly, monthly, yearly, or custom",
+        detail=(
+            "report_type must be daily, weekly, monthly, "
+            "yearly, or custom"
+        ),
     )
 
 
@@ -65,8 +71,10 @@ def attendance_report(
         description="Choose: daily, weekly, monthly, yearly, or custom",
         enum=["daily", "weekly", "monthly", "yearly", "custom"],
     ),
-    # date_value: date | None = Query(None, alias="date"),
-    date_value: Annotated[date | None, Query(alias="date")] = None,
+    date_value: Annotated[
+        date | None,
+        Query(alias="date"),
+    ] = None,
     year: int | None = None,
     month: int | None = None,
     start_date: date | None = None,
@@ -81,7 +89,12 @@ def attendance_report(
         end_date,
     )
 
-    employees = list(employees_collection.find({"is_active": True}, {"_id": 0}))
+    employees = list(
+        employees_collection.find(
+            {"is_active": True},
+            {"_id": 0}
+        )
+    )
 
     records = list(
         attendance_collection.find(

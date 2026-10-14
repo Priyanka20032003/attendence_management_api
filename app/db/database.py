@@ -3,10 +3,6 @@ from pymongo.database import Database
 
 from app.core.config import settings
 
-# client = MongoClient(settings.mongo_url, serverSelectionTimeoutMS=5000, tz_aware=True)
-
-# database = client[settings.database_name]
-
 client: MongoClient = MongoClient(
     settings.mongo_url,
     serverSelectionTimeoutMS=5000,
