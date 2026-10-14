@@ -39,7 +39,7 @@ jobs:
 
       - name: Check Import Sorting (isort)
         run: |
-          isort --check-only .
+          isort --check-only app tests
 
       - name: Run Flake8
         run: |

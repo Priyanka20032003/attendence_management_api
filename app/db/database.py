@@ -1,5 +1,6 @@
 from pymongo import MongoClient
 from pymongo.database import Database
+
 from app.core.config import settings
 
 # client = MongoClient(settings.mongo_url, serverSelectionTimeoutMS=5000, tz_aware=True)
