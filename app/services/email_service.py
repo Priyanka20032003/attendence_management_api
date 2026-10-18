@@ -4,22 +4,54 @@ from email.message import EmailMessage
 from app.core.config import settings
 
 
+def get_tenant_smtp_config(tenant_id: str) -> dict:
+    if tenant_id == "demo-company":
+        smtp_username = settings.demo_smtp_username
+        smtp_password = settings.demo_smtp_password
+        email_from = settings.demo_email_from
+        company_name = "Demo Company"
+
+    elif tenant_id == "company-two":
+        smtp_username = settings.company_two_smtp_username
+        smtp_password = settings.company_two_smtp_password
+        email_from = settings.company_two_email_from
+        company_name = "Company Two"
+
+    else:
+        raise ValueError("No email configuration found for this company.")
+
+    if not smtp_username or not smtp_password:
+        raise ValueError(f"SMTP credentials are missing for {company_name}.")
+
+    return {
+        "smtp_host": settings.smtp_host,
+        "smtp_port": settings.smtp_port,
+        "smtp_username": smtp_username,
+        "smtp_password": smtp_password,
+        "email_from": email_from or smtp_username,
+        "company_name": company_name,
+    }
+
+
 def send_email(
     recipient: str,
     subject: str,
     body: str,
+    smtp_config: dict,
     html_body: str | None = None,
 ) -> bool:
     if not settings.email_enabled:
         print("Email sending is disabled. Set EMAIL_ENABLED=true to send.")
         return False
 
-    if not settings.smtp_username or not settings.smtp_password:
-        raise ValueError("SMTP_USERNAME and SMTP_PASSWORD must be configured.")
+    smtp_host = smtp_config["smtp_host"]
+    smtp_port = smtp_config["smtp_port"]
+    smtp_username = smtp_config["smtp_username"]
+    smtp_password = smtp_config["smtp_password"]
 
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = settings.email_from or settings.smtp_username
+    message["From"] = smtp_config["email_from"]
     message["To"] = recipient
     message.set_content(body)
 
@@ -28,17 +60,14 @@ def send_email(
 
     try:
         with smtplib.SMTP(
-            settings.smtp_host,
-            settings.smtp_port,
+            smtp_host,
+            smtp_port,
             timeout=20,
         ) as server:
             server.ehlo()
             server.starttls()
             server.ehlo()
-            server.login(
-                settings.smtp_username,
-                settings.smtp_password,
-            )
+            server.login(smtp_username, smtp_password)
             server.send_message(message)
 
         print(f"Email sent successfully to {recipient}")
@@ -54,9 +83,14 @@ def send_daily_violation_email(
     employee_email: str,
     attendance_date: str,
     total_hours: float,
+    tenant_id: str,
 ) -> bool:
-    subject = "Attendance Policy Violation - Daily Working Hours"
-
+    smtp_config = get_tenant_smtp_config(tenant_id)
+    company_name = smtp_config["company_name"]
+    subject = (
+        f"{company_name} - Attendance Policy Violation - "
+        "Daily Working Hours"
+    )
     body = (
         f"Dear {employee_name},\n\n"
         "You have not met the minimum daily office attendance "
@@ -149,4 +183,5 @@ def send_daily_violation_email(
         subject=subject,
         body=body,
         html_body=html_body,
+        smtp_config=smtp_config,
     )

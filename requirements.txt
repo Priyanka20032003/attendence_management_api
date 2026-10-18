@@ -6,3 +6,8 @@ python-dotenv
 email-validator
 pytest
 httpx
+pyjwt 
+pwdlib[argon2] 
+python-multipart
+redis
+celery[redis]

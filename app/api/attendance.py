@@ -1,15 +1,15 @@
 import logging
-import smtplib
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.errors import DuplicateKeyError
 
 from app.core.config import settings
+from app.core.dependencies import require_tenant_admin
 from app.db.database import attendance_collection, employees_collection
 from app.schemas.attendance import CheckInRequest, CheckOutRequest
-from app.services.email_service import send_daily_violation_email
+from app.tasks.attendance_tasks import send_daily_violation_email_task
 
 logger = logging.getLogger(__name__)
 
@@ -18,21 +18,29 @@ router = APIRouter(
     tags=["Attendance"],
 )
 
-
 company_tz = ZoneInfo(settings.company_timezone)
 
 
-@router.post("/check-in", status_code=201)
-def check_in(data: CheckInRequest):
+@router.post("/check-in", status_code=status.HTTP_201_CREATED)
+def check_in(
+    data: CheckInRequest,
+    current_user: dict = Depends(require_tenant_admin),
+):
+    tenant_id = current_user["tenant_id"]
+
     employee = employees_collection.find_one(
         {
+            "tenant_id": tenant_id,
             "employee_id": data.employee_id,
             "is_active": True,
         }
     )
 
     if not employee:
-        raise HTTPException(404, "Active employee not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Active employee not found in your company",
+        )
 
     local_datetime = datetime.combine(
         data.attendance_date,
@@ -40,25 +48,27 @@ def check_in(data: CheckInRequest):
         tzinfo=company_tz,
     )
     entry_utc = local_datetime.astimezone(UTC)
+    now = datetime.now(UTC)
 
     try:
         attendance_collection.insert_one(
             {
+                "tenant_id": tenant_id,
                 "employee_id": data.employee_id,
                 "date": data.attendance_date.isoformat(),
                 "entry_time": entry_utc,
                 "exit_time": None,
                 "total_hours": None,
                 "status": "Incomplete",
-                "created_at": datetime.now(UTC),
-                "updated_at": datetime.now(UTC),
+                "created_at": now,
+                "updated_at": now,
             }
         )
-    except DuplicateKeyError:
+    except DuplicateKeyError as exc:
         raise HTTPException(
-            409,
-            "Attendance already exists for this employee on this date",
-        )
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Attendance already exists for this employee on this date",
+        ) from exc
 
     return {
         "message": "Check-in recorded successfully",
@@ -69,16 +79,25 @@ def check_in(data: CheckInRequest):
 
 
 @router.put("/check-out")
-def check_out(data: CheckOutRequest):
+def check_out(
+    data: CheckOutRequest,
+    current_user: dict = Depends(require_tenant_admin),
+):
+    tenant_id = current_user["tenant_id"]
+
     employee = employees_collection.find_one(
         {
+            "tenant_id": tenant_id,
             "employee_id": data.employee_id,
             "is_active": True,
         }
     )
 
     if not employee:
-        raise HTTPException(404, "Active employee not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Active employee not found in your company",
+        )
 
     local_datetime = datetime.combine(
         data.attendance_date,
@@ -89,6 +108,7 @@ def check_out(data: CheckOutRequest):
 
     record = attendance_collection.find_one(
         {
+            "tenant_id": tenant_id,
             "employee_id": data.employee_id,
             "date": data.attendance_date.isoformat(),
             "exit_time": None,
@@ -96,14 +116,17 @@ def check_out(data: CheckOutRequest):
     )
 
     if not record:
-        raise HTTPException(404, "No open check-in found for this date")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No open check-in found for this date",
+        )
 
     entry_time = record["entry_time"]
 
     if exit_utc <= entry_time:
         raise HTTPException(
-            400,
-            "Exit time must be later than entry time",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Exit time must be later than entry time",
         )
 
     total_hours = round(
@@ -111,8 +134,12 @@ def check_out(data: CheckOutRequest):
         2,
     )
 
-    attendance_collection.update_one(
-        {"_id": record["_id"], "exit_time": None},
+    result = attendance_collection.update_one(
+        {
+            "_id": record["_id"],
+            "tenant_id": tenant_id,
+            "exit_time": None,
+        },
         {
             "$set": {
                 "exit_time": exit_utc,
@@ -123,19 +150,30 @@ def check_out(data: CheckOutRequest):
         },
     )
 
-    # Send an email if the employee worked less than 5 hours.
+    if result.modified_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Attendance was already updated; "
+                "please fetch the record again"
+            ),
+        )
+
+    # Queue an email if the employee worked less than 5 hours.
     if total_hours < 5:
         try:
-            send_daily_violation_email(
+            send_daily_violation_email_task.delay(
                 employee_name=employee["name"],
                 employee_email=employee["email"],
                 attendance_date=data.attendance_date.isoformat(),
                 total_hours=total_hours,
+                tenant_id=tenant_id,
             )
-        # except Exception as exc:
-        #     print(f"Could not send daily violation email: {exc}")
-        except (smtplib.SMTPException, OSError):
-            logger.exception("Could not send daily violation email")
+        except Exception:
+            logger.exception(
+                "Could not queue daily violation email " "for tenant %s",
+                tenant_id,
+            )
 
     return {
         "message": "Check-out recorded successfully",
@@ -149,10 +187,32 @@ def check_out(data: CheckOutRequest):
 
 
 @router.get("/{employee_id}")
-def get_attendance(employee_id: str):
+def get_attendance(
+    employee_id: str,
+    current_user: dict = Depends(require_tenant_admin),
+):
+    tenant_id = current_user["tenant_id"]
+
+    employee = employees_collection.find_one(
+        {
+            "tenant_id": tenant_id,
+            "employee_id": employee_id,
+        },
+        {"_id": 0, "employee_id": 1},
+    )
+
+    if not employee:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Employee not found in your company",
+        )
+
     records = list(
         attendance_collection.find(
-            {"employee_id": employee_id},
+            {
+                "tenant_id": tenant_id,
+                "employee_id": employee_id,
+            },
             {"_id": 0},
         ).sort("date", -1)
     )

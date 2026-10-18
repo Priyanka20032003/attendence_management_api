@@ -2,9 +2,10 @@ import calendar
 from datetime import date, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.config import settings
+from app.core.dependencies import require_tenant_admin
 from app.db.database import attendance_collection, employees_collection
 
 router = APIRouter(
@@ -55,15 +56,15 @@ def get_report_dates(
             )
         return start_date, end_date
 
-    error = "report_type must be daily, weekly, monthly, " "yearly, or custom"
     raise HTTPException(
         status_code=400,
-        detail=error,
+        detail="report_type must be daily, weekly, monthly, yearly, or custom",
     )
 
 
 @router.get("/report/")
 def attendance_report(
+    current_user: dict = Depends(require_tenant_admin),
     report_type: str = Query(
         ...,
         description="Choose: daily, weekly, monthly, yearly, or custom",
@@ -78,6 +79,8 @@ def attendance_report(
     start_date: date | None = None,
     end_date: date | None = None,
 ):
+    tenant_id = current_user["tenant_id"]
+
     start, end = get_report_dates(
         report_type,
         date_value,
@@ -87,27 +90,35 @@ def attendance_report(
         end_date,
     )
 
+    # Fetch only active employees belonging to the logged-in tenant.
     employees = list(
         employees_collection.find(
-            {"is_active": True},
+            {
+                "tenant_id": tenant_id,
+                "is_active": True,
+            },
             {"_id": 0},
         )
     )
 
+    # Fetch attendance records belonging to this tenant and period.
     records = list(
         attendance_collection.find(
             {
+                "tenant_id": tenant_id,
                 "date": {
                     "$gte": start.isoformat(),
                     "$lte": end.isoformat(),
-                }
+                },
             },
             {"_id": 0},
         ).sort([("date", 1), ("employee_id", 1)])
     )
 
+    # Include tenant_id in the key to prevent cross-tenant matching.
     attendance_lookup = {
-        (record["employee_id"], record["date"]): record for record in records
+        (record["tenant_id"], record["employee_id"], record["date"]): record
+        for record in records
     }
 
     report_days = []
@@ -157,7 +168,9 @@ def attendance_report(
                 )
                 continue
 
-            record = attendance_lookup.get((employee_id, day.isoformat()))
+            record = attendance_lookup.get(
+                (tenant_id, employee_id, day.isoformat())
+            )
 
             if not record:
                 status = "Not Attended Office"
