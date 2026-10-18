@@ -1,4 +1,3 @@
-
 from app.db.database import employees_collection
 
 # Assign existing unassigned employee records to the first company.

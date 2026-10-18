@@ -1,15 +1,10 @@
-
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from getpass import getpass
 
 from pymongo.errors import PyMongoError
 
 from app.core.security import hash_password
-from app.db.database import (
-    client,
-    tenants_collection,
-    users_collection,
-)
+from app.db.database import client, tenants_collection, users_collection
 
 
 def main():
@@ -18,9 +13,7 @@ def main():
         client.admin.command("ping")
 
         tenant_name = input("Organization name: ").strip()
-        tenant_id = input(
-            "Tenant ID (example: company-001): "
-        ).strip().lower()
+        tenant_id = input("Tenant ID (example: company-001): ").strip().lower()
         email = input("Administrator email: ").strip().lower()
 
         if not tenant_name or not tenant_id or not email:
@@ -46,7 +39,7 @@ def main():
             print("Passwords do not match.")
             return
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         tenant = {
             "tenant_id": tenant_id,
@@ -70,9 +63,7 @@ def main():
             users_collection.insert_one(user)
         except Exception:
             # Avoid leaving an empty tenant if user creation fails.
-            tenants_collection.delete_one(
-                {"_id": tenant_result.inserted_id}
-            )
+            tenants_collection.delete_one({"_id": tenant_result.inserted_id})
             raise
 
         print("\nTenant and administrator created successfully.")

@@ -1,4 +1,3 @@
-
 from app.db.database import attendance_collection
 
 # Assign existing attendance records to the first company.
