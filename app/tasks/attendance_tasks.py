@@ -6,11 +6,8 @@ from pymongo.errors import DuplicateKeyError
 
 from app.core.celery_app import celery_app
 from app.core.config import settings
-from app.db.database import (
-    attendance_collection,
-    employees_collection,
-    notifications_collection,
-)
+from app.db.database import (attendance_collection, employees_collection,
+                             notifications_collection)
 from app.services.email_service import send_daily_violation_email
 
 logger = logging.getLogger(__name__)
