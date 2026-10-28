@@ -11,6 +11,7 @@ from app.api.employees import router as employees_router
 from app.api.reports import router as reports_router
 from app.core.redis_client import redis_client
 from app.db.database import close_database_connection, connect_to_database
+from prometheus_fastapi_instrumentator import Instrumentator
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,11 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
-
+Instrumentator().instrument(app).expose(
+    app,
+    endpoint="/metrics",
+    include_in_schema=False,
+)
 app.include_router(auth_router)
 app.include_router(employees_router)
 app.include_router(attendance_router)
