@@ -1,4 +1,3 @@
-
 import logging
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
@@ -8,15 +7,13 @@ from pymongo.errors import DuplicateKeyError
 
 from app.core.config import settings
 from app.core.dependencies import require_tenant_admin
-from app.db.database import attendance_collection, employees_collection
-from app.schemas.attendance import CheckInRequest, CheckOutRequest
-from app.tasks.attendance_tasks import send_daily_violation_email_task
-
 from app.db.database import (
     attendance_collection,
     employees_collection,
     notifications_collection,
 )
+from app.schemas.attendance import CheckInRequest, CheckOutRequest
+from app.tasks.attendance_tasks import send_daily_violation_email_task
 
 logger = logging.getLogger(__name__)
 
@@ -168,11 +165,7 @@ def check_in(
     result = attendance_collection.update_one(
         {
             **query,
-            "sessions": {
-                "$not": {
-                    "$elemMatch": {"exit_time": None}
-                }
-            },
+            "sessions": {"$not": {"$elemMatch": {"exit_time": None}}},
         },
         {
             "$push": {
@@ -210,7 +203,7 @@ def check_out(
     current_user: dict = Depends(require_tenant_admin),
 ):
     tenant_id = current_user["tenant_id"]
-    employee = _get_employee(tenant_id, data.employee_id)
+    # employee = _get_employee(tenant_id, data.employee_id)
 
     local_datetime = datetime.combine(
         data.attendance_date,
@@ -237,8 +230,7 @@ def check_out(
     sessions = _ensure_sessions(record)
 
     open_sessions = [
-        session for session in sessions
-        if session.get("exit_time") is None
+        session for session in sessions if session.get("exit_time") is None
     ]
 
     if not open_sessions:
@@ -290,6 +282,13 @@ def check_out(
 
     # Re-read the updated daily document and calculate all completed visits.
     updated_record = attendance_collection.find_one(query)
+
+    if updated_record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attendance record not found after check-out",
+        )
+
     updated_sessions = updated_record.get("sessions", [])
     daily_total = _session_hours(updated_sessions)
     has_open_session = any(
@@ -301,9 +300,7 @@ def check_out(
         {
             "$set": {
                 "total_hours": daily_total,
-                "status": (
-                    "Incomplete" if has_open_session else "Present"
-                ),
+                "status": ("Incomplete" if has_open_session else "Present"),
                 "updated_at": datetime.now(UTC),
             }
         },
@@ -318,8 +315,7 @@ def check_out(
         "session_hours": duration_hours,
         "daily_total_hours": daily_total,
         "sessions_completed": sum(
-            1 for item in updated_sessions
-            if item.get("exit_time") is not None
+            1 for item in updated_sessions if item.get("exit_time") is not None
         ),
         "status": "Incomplete" if has_open_session else "Present",
         "daily_minimum_hours": MIN_DAILY_HOURS,
@@ -364,7 +360,6 @@ def finalize_day(
 
     daily_total = _session_hours(sessions)
 
-   
     email_queued = False
 
     if daily_total < MIN_DAILY_HOURS:
@@ -417,9 +412,11 @@ def finalize_day(
                 )
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Could not queue the violation email. Please contact the administrator.",
+                    detail=(
+                        "Could not queue the violation email. "
+                        "Please contact the administrator."
+                    ),
                 )
-
 
     return {
         "message": "Daily attendance evaluated",
@@ -469,7 +466,8 @@ def get_attendance(
         if sessions is not None:
             record["total_hours"] = _session_hours(sessions)
             record["sessions_completed"] = sum(
-                1 for session in sessions
+                1
+                for session in sessions
                 if session.get("exit_time") is not None
             )
             record["has_open_session"] = any(

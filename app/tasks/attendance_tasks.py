@@ -1,16 +1,19 @@
-from app.core.celery_app import celery_app
-from app.services.email_service import send_daily_violation_email
-
+import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
 from pymongo.errors import DuplicateKeyError
 
+from app.core.celery_app import celery_app
+from app.core.config import settings
 from app.db.database import (
     attendance_collection,
     employees_collection,
     notifications_collection,
 )
-from app.core.config import settings
+from app.services.email_service import send_daily_violation_email
+
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="attendance_tasks.test_task")
@@ -46,6 +49,7 @@ def send_daily_violation_email_task(
         )
     except Exception as exc:
         raise self.retry(exc=exc) from exc
+
 
 @celery_app.task(name="attendance_tasks.check_daily_attendance_violations")
 def check_daily_attendance_violations() -> dict:
@@ -112,9 +116,7 @@ def check_daily_attendance_violations() -> dict:
                     continue
 
                 total_seconds = sum(
-                    (
-                        s["exit_time"] - s["entry_time"]
-                    ).total_seconds()
+                    (s["exit_time"] - s["entry_time"]).total_seconds()
                     for s in sessions
                     if s.get("entry_time") is not None
                     and s.get("exit_time") is not None
@@ -126,7 +128,7 @@ def check_daily_attendance_violations() -> dict:
 
         # This is a preliminary duplicate guard.
         # We will make it atomic in the next step before enabling the schedule.
-        
+
         # Claim this notification before queueing the email.
         # The unique MongoDB index prevents duplicate claims.
         try:
@@ -176,7 +178,6 @@ def check_daily_attendance_violations() -> dict:
                     }
                 },
             )
-
 
     return {
         "date": date_key,

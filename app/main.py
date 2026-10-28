@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from prometheus_fastapi_instrumentator import Instrumentator
 from pymongo.errors import PyMongoError
 from redis.exceptions import RedisError
 
@@ -11,7 +12,6 @@ from app.api.employees import router as employees_router
 from app.api.reports import router as reports_router
 from app.core.redis_client import redis_client
 from app.db.database import close_database_connection, connect_to_database
-from prometheus_fastapi_instrumentator import Instrumentator
 
 logger = logging.getLogger(__name__)
 

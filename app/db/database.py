@@ -56,12 +56,12 @@ def connect_to_database():
     attendance_collection.create_index("date")
 
     notifications_collection.drop_index(
-    "employee_id_1_period_start_1_period_end_1_violation_type_1"
-)
+        "employee_id_1_period_start_1_period_end_1_violation_type_1"
+    )
 
     old_index_name = (
-    "employee_id_1_period_start_1_period_end_1_violation_type_1"
-)
+        "employee_id_1_period_start_1_period_end_1_violation_type_1"
+    )
 
     existing_indexes = notifications_collection.index_information()
 
@@ -79,8 +79,6 @@ def connect_to_database():
         unique=True,
         name="tenant_employee_period_violation_unique",
     )
-
-
 
 
 def close_database_connection():
