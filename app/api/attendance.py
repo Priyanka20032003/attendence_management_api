@@ -7,8 +7,11 @@ from pymongo.errors import DuplicateKeyError
 
 from app.core.config import settings
 from app.core.dependencies import require_tenant_admin
-from app.db.database import (attendance_collection, employees_collection,
-                             notifications_collection)
+from app.db.database import (
+    attendance_collection,
+    employees_collection,
+    notifications_collection,
+)
 from app.schemas.attendance import CheckInRequest, CheckOutRequest
 from app.tasks.attendance_tasks import send_daily_violation_email_task
 
