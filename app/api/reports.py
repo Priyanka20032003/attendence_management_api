@@ -1,6 +1,6 @@
 import calendar
 from datetime import date, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -65,10 +65,15 @@ def get_report_dates(
 @router.get("/report/")
 def attendance_report(
     current_user: dict = Depends(require_tenant_admin),
-    report_type: str = Query(
+    report_type: Literal[
+        "daily",
+        "weekly",
+        "monthly",
+        "yearly",
+        "custom",
+    ] = Query(
         ...,
         description="Choose: daily, weekly, monthly, yearly, or custom",
-        enum=["daily", "weekly", "monthly", "yearly", "custom"],
     ),
     date_value: Annotated[
         date | None,
